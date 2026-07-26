@@ -1,0 +1,48 @@
+# EPFO ECR Checker — Unofficial ECR Format 2.0 Validation Tool
+
+> EPFO ECR Checker is a browser-based compliance tool for Indian employers and HR teams to validate and rectify EPFO Electronic Challan cum Return (ECR Format 2.0) text files against statutory EPF & MP Act rules before official portal submission.
+
+## Core Capabilities
+- **16-Point Statutory Validation**: Checks UAN format (12 digits), member names, wage ceilings (₹15,000 EPS cap), 12% EE EPF calculations, 8.33% EPS calculations, 3.67% ER PF differentials, EDLI wage parity, NCP days (0-31), and refund advances.
+- **Higher Pensioner (HP) Surcharge**: Supports Supreme Court 2022 order calculations for Higher Pensioners (1.16% surcharge on EPS wages above ₹15,000).
+- **Interactive Fixes**: Single-click inline field fixes and guided error resolution wizard.
+- **Report Export**: Download corrected ECR text files, formatted PDF audit reports, or CSV summary exports.
+- **100% Client-Side Privacy**: Runs completely inside the browser — zero employee data sent to external servers.
+
+## File Format Requirements (ECR 2.0)
+- Delimiter: `#~#`
+- Fields per row: 11
+- Encoding: Plain Text / UTF-8
+- Field sequence:
+  1. UAN (12 digits)
+  2. Member Name
+  3. Gross Wages (₹)
+  4. EPF Wages (₹)
+  5. EPS Wages (₹)
+  6. EDLI Wages (₹)
+  7. EE EPF Contribution (₹)
+  8. EPS Contribution (₹)
+  9. ER PF Contribution (₹)
+  10. NCP Days (0-31)
+  11. Refund of Advances (₹)
+
+## Rule Codes Reference
+- `ECR-001`: Broken row structure / delimiter count mismatch
+- `ECR-002`: Invalid 12-digit UAN
+- `ECR-003`: Missing member name
+- `ECR-004`: Non-integer numeric wage value
+- `ECR-005`: EPF wages exceed gross wages
+- `ECR-006`: EPS wages exceed ₹15,000 ceiling (Normal Pensioner)
+- `ECR-007`: EPS wages exceed EPF wages
+- `ECR-008`: EDLI wages unequal to EPF wages
+- `ECR-009`: EE EPF contribution mismatch (12% of EPF wages)
+- `ECR-010`: EPS contribution incorrect (8.33% of EPS wages)
+- `ECR-011`: ER PF contribution incorrect (3.67% + EPS differential)
+- `ECR-012`: Non-Contributing Period (NCP) days verification
+- `ECR-013`: Refund of advances verification
+- `ECR-014`: NCP days out of valid range (0-31)
+- `ECR-015`: Zero gross wage warning
+- `ECR-016`: Low EPS wages for Higher Pensioner tag
+
+## Canonical Site
+- Site: https://ecrvalidator.tidentoddy.workers.dev/

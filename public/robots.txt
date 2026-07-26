@@ -1,0 +1,9 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+
+# LLM / AI context file
+# Location: https://ecrvalidator.tidentoddy.workers.dev/llms.txt
+
+# Sitemap location
+Sitemap: https://ecrvalidator.tidentoddy.workers.dev/sitemap.xml
