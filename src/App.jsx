@@ -648,6 +648,7 @@ export default function App() {
 
   const taRef  = useRef();
   const gutRef = useRef();
+  const fileInputRef = useRef(null);
 
   // Core derived state
   const rows   = useMemo(() => parseAll(text, hpSet), [text, hpSet]);
@@ -681,11 +682,72 @@ export default function App() {
     setSelLine(null);
   };
 
-  const handleFile = f => {
-    const r = new FileReader();
-    r.onload  = e => loadText(e.target.result, f.name);
-    r.onerror = () => setPasteMode(true);
-    r.readAsText(f);
+    const handleFile = async (input) => {
+    if (!input) return;
+
+    let file = null;
+    if (input instanceof File || input instanceof Blob) {
+      file = input;
+    } else if (input?.target?.files?.length) {
+      file = input.target.files[0];
+    } else if (input?.dataTransfer?.files?.length) {
+      file = input.dataTransfer.files[0];
+    } else if (input && input[0] instanceof File) {
+      file = input[0];
+    }
+
+    if (!file) return;
+    const name = file.name || "ecr.txt";
+
+    // 1. Try modern Blob.text() API
+    if (typeof file.text === "function") {
+      try {
+        const text = await file.text();
+        if (typeof text === "string") {
+          loadText(text, name);
+          return;
+        }
+      } catch (err) {
+        console.warn("file.text() failed, trying FileReader", err);
+      }
+    }
+
+    // 2. Fallback to FileReader API with ArrayBuffer / UTF-8 decoding
+    try {
+      const reader = new FileReader();
+      reader.onload = e => {
+        let res = e.target?.result;
+        if (res instanceof ArrayBuffer) {
+          try {
+            res = new TextDecoder("utf-8").decode(res);
+          } catch (dErr) {
+            res = new TextDecoder("windows-1252").decode(res);
+          }
+        }
+        if (typeof res === "string") {
+          loadText(res, name);
+        }
+      };
+      reader.onerror = () => {
+        // Fallback: read as ArrayBuffer
+        try {
+          const abReader = new FileReader();
+          abReader.onload = ev => {
+            const buf = ev.target?.result;
+            if (buf) {
+              const str = new TextDecoder("utf-8").decode(buf);
+              loadText(str, name);
+            }
+          };
+          abReader.readAsArrayBuffer(file);
+        } catch (fErr) {
+          console.error("FileReader fallback failed", fErr);
+        }
+      };
+      reader.readAsText(file);
+    } catch (err) {
+      console.error("handleFile error", err);
+    }
   };
 
   const fixAll = () => setText(prev => applyAllFixes(prev, hpSet));
@@ -782,7 +844,7 @@ export default function App() {
 
           {!pasteMode ? (
             <div
-              onDrop={e=>{e.preventDefault();setDragOver(false);const f=e.dataTransfer.files[0];if(f)handleFile(f);}}
+              onDrop={e=>{e.preventDefault();setDragOver(false);handleFile(e);}}
               onDragOver={e=>{e.preventDefault();setDragOver(true);}}
               onDragLeave={()=>setDragOver(false)}
               style={{
@@ -798,12 +860,21 @@ export default function App() {
                 .txt · delimiter <code style={{background:B.grey1,border:`1px solid ${B.grey2}`,padding:"1px 6px",fontFamily:FM,fontSize:11}}>#~#</code> · 11 fields per row
               </div>
               <div style={{display:"flex",gap:12,justifyContent:"center",alignItems:"center"}}>
-                <label style={{cursor:"pointer"}}>
-                  <BBtn as="span" variant="ink" size="lg" style={{pointerEvents:"none"}}>CHOOSE FILE</BBtn>
-                  <input type="file" accept=".txt,.ecr,text/plain" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)handleFile(f);}}/>
-                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.ecr,text/plain,*/*"
+                  style={{display:"none"}}
+                  onChange={e => {
+                    handleFile(e);
+                    e.target.value = "";
+                  }}
+                />
+                <BBtn onClick={() => fileInputRef.current?.click()} variant="ink" size="lg">
+                  CHOOSE FILE
+                </BBtn>
                 <span style={{fontFamily:FH,fontSize:11,color:B.grey4,fontWeight:700}}>OR</span>
-                <BBtn onClick={()=>setPasteMode(true)} variant="ghost" size="lg">PASTE TEXT</BBtn>
+                <BBtn onClick={() => setPasteMode(true)} variant="ghost" size="lg">PASTE TEXT</BBtn>
               </div>
             </div>
           ) : (
