@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { buildValidationAnalytics, trackEvent, trackPageView } from "./analytics";
 
 // ─── DESIGN SYSTEM ────────────────────────────────────────────────────────────
 const B = {
@@ -221,6 +222,10 @@ function exportCSV(rows, fileName) {
   const a    = document.createElement("a");
   a.href = url; a.download = `ECR_Validation_${Date.now()}.csv`; a.click();
   URL.revokeObjectURL(url);
+  trackEvent("validation_report_downloaded", {
+    report_format: "csv",
+    ...buildValidationAnalytics(rows),
+  });
 }
 
 function exportPDF(rows, fileName) {
@@ -273,6 +278,10 @@ function exportPDF(rows, fileName) {
   <div class="disclaimer"><b>DISCLAIMER:</b> This is an unofficial validation tool not affiliated with or endorsed by EPFO or the Government of India. Results are indicative only. Employers remain solely responsible for verifying all ECR data against official EPFO guidelines before submission. No legal liability is accepted for errors, omissions, or losses arising from use of this tool.</div>
   </body></html>`;
   const w = window.open("","_blank");
+  trackEvent("validation_report_downloaded", {
+    report_format: "pdf",
+    ...buildValidationAnalytics(rows),
+  });
   w.document.write(html); w.document.close(); setTimeout(()=>w.print(),400);
 }
 
@@ -649,6 +658,7 @@ export default function App() {
   const taRef  = useRef();
   const gutRef = useRef();
   const fileInputRef = useRef(null);
+  const guidedModeTrackedRef = useRef(false);
 
   // Core derived state
   const rows   = useMemo(() => parseAll(text, hpSet), [text, hpSet]);
@@ -673,13 +683,36 @@ export default function App() {
     taRef.current.scrollTop = (selLine - 1) * 22 - 80;
   }, [selLine]);
 
-  const loadText = (t, name="ecr.txt") => {
-    setText(t.trimEnd());
+  useEffect(() => {
+    trackPageView(stage === "editor" ? "ECR Editor" : "ECR Upload", `/${stage}`);
+  }, [stage]);
+
+  useEffect(() => {
+    if (!guidedMode) {
+      guidedModeTrackedRef.current = false;
+      return;
+    }
+    if (guidedModeTrackedRef.current) return;
+
+    guidedModeTrackedRef.current = true;
+    trackEvent("guided_fix_started", buildValidationAnalytics(rows));
+  }, [guidedMode, rows]);
+
+  const loadText = (t, name="ecr.txt", source="unknown") => {
+    const normalizedText = t.trimEnd();
+    const parsedRows = parseAll(normalizedText, hpSet);
+
+    setText(normalizedText);
     setFileName(name);
     setStage("editor");
     setPasteMode(false);
     setPasteText("");
     setSelLine(null);
+
+    trackEvent("ecr_loaded", {
+      source,
+      ...buildValidationAnalytics(parsedRows),
+    });
   };
 
     const handleFile = async (input) => {
@@ -704,7 +737,7 @@ export default function App() {
       try {
         const text = await file.text();
         if (typeof text === "string") {
-          loadText(text, name);
+          loadText(text, name, "file_upload");
           return;
         }
       } catch (err) {
@@ -720,12 +753,12 @@ export default function App() {
         if (res instanceof ArrayBuffer) {
           try {
             res = new TextDecoder("utf-8").decode(res);
-          } catch (dErr) {
+          } catch {
             res = new TextDecoder("windows-1252").decode(res);
           }
         }
         if (typeof res === "string") {
-          loadText(res, name);
+          loadText(res, name, "file_upload");
         }
       };
       reader.onerror = () => {
@@ -736,7 +769,7 @@ export default function App() {
             const buf = ev.target?.result;
             if (buf) {
               const str = new TextDecoder("utf-8").decode(buf);
-              loadText(str, name);
+              loadText(str, name, "file_upload");
             }
           };
           abReader.readAsArrayBuffer(file);
@@ -750,7 +783,11 @@ export default function App() {
     }
   };
 
-  const fixAll = () => setText(prev => applyAllFixes(prev, hpSet));
+  const fixAll = () => setText(prev => {
+    const beforeRows = parseAll(prev, hpSet);
+    trackEvent("fix_all_applied", buildValidationAnalytics(beforeRows));
+    return applyAllFixes(prev, hpSet);
+  });
 
   const download = () => setText(prev => {
     const blob = new Blob([prev], {type:"text/plain"});
@@ -758,17 +795,22 @@ export default function App() {
     const a    = document.createElement("a");
     a.href = url; a.download = `FIXED_${fileName}`; a.click();
     URL.revokeObjectURL(url);
+    trackEvent("fixed_ecr_downloaded", buildValidationAnalytics(rows));
     return prev;
   });
 
   const copyText = async () => {
     await navigator.clipboard.writeText(text);
+    trackEvent("fixed_ecr_copied", buildValidationAnalytics(rows));
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   };
 
   const toggleHP = uan => setHpSet(prev => {
     const n = new Set(prev);
-    n.has(uan) ? n.delete(uan) : n.add(uan);
+    const enabled = !n.has(uan);
+    if (enabled) n.add(uan);
+    else n.delete(uan);
+    trackEvent("higher_pensioner_toggled", { enabled });
     return n;
   });
 
@@ -779,7 +821,10 @@ export default function App() {
       if (idx < 0 || idx >= ls.length) return prev;
       const fields = ls[idx].split(DELIM);
       const fi     = FIELDS.findIndex(f => f.key === fixField);
-      if (fi !== -1) { fields[fi] = fixedValue; ls[idx] = fields.join(DELIM); }
+      if (fi !== -1) {
+        fields[fi] = fixedValue; ls[idx] = fields.join(DELIM);
+        trackEvent("single_fix_applied", { field: fixField });
+      }
       return ls.join("\n");
     });
   };
@@ -898,7 +943,7 @@ export default function App() {
                 }}
               />
               <div style={{display:"flex",gap:10,marginTop:12}}>
-                <BBtn onClick={()=>pasteText.trim()&&loadText(pasteText.trim())} variant={pasteText.trim()?"green":"ghost"} size="lg" disabled={!pasteText.trim()} style={{flex:1,justifyContent:"center"}}>
+                <BBtn onClick={()=>pasteText.trim()&&loadText(pasteText.trim(), "pasted-ecr.txt", "paste")} variant={pasteText.trim()?"green":"ghost"} size="lg" disabled={!pasteText.trim()} style={{flex:1,justifyContent:"center"}}>
                   OPEN IN EDITOR →
                 </BBtn>
                 <BBtn onClick={()=>{setPasteMode(false);setPasteText("");}} variant="ghost" size="md">CANCEL</BBtn>
