@@ -933,7 +933,7 @@ export default function App() {
               </div>
               <textarea
                 value={pasteText} onChange={e=>setPasteText(e.target.value)} autoFocus
-                placeholder={"100860375587#~#AMBILI P K#~#5810#~#5810#~#5810#~#5810#~#697#~#484#~#213#~#0#~#0"}
+                placeholder={"100123456789#~#BINOD#~#5810#~#5810#~#5810#~#5810#~#697#~#484#~#213#~#0#~#0"}
                 style={{
                   width:"100%",minHeight:140,fontFamily:FM,fontSize:12,
                   background:B.cream,border:`2px solid ${B.ink}`,
